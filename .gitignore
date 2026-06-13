@@ -1,0 +1,6 @@
+# CIT artifacts
+cit-output.log
+.cit-passed
+
+# OS
+.DS_Store
