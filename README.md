@@ -55,7 +55,7 @@ claude
 
 ## Cookbook workflow
 
-The cookbook (`.claude/reference/freebsd-porting-cookbook.md`) is the crown jewel. It grows with every port:
+The cookbook (`.claude/reference/freebsd-porting-cookbook.md`) becomes more valuable over time as a reference that grows with every port:
 
 1. During a port, the skill appends new error-signature entries to the local copy
 2. After the port ships, PR those entries back to this toolkit repo
