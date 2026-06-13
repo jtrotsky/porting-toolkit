@@ -97,6 +97,18 @@ Check the base image's pkg branch first (`quarterly` vs `latest`).
 RUN for f in dest/a dest/b ; do test -f "$f" || { echo "PATCH DRIFT: $f gone upstream"; exit 1; }; done
 ```
 
+### A `.patch` fails to apply: `Hunk #N FAILED`, `1 out of 1 hunks failed`, `.rej` saved
+**Cause:** the patch's context lines (or `@@ -N` line numbers) don't match the real upstream file — usually a hand-written/reconstructed diff against the wrong version. `--fuzz=0` correctly refuses it.
+**Critical:** `dbuild generate` + `lint-compose.sh` **never apply patches** — they pass on a broken patch. Only `dbuild build` catches this. Never call a patch done until a build applies it.
+**Fix — generate the patch from a real diff against the *pinned* upstream, not from memory:**
+```sh
+git clone --depth 1 --branch <TAG> <upstream-url> /tmp/src
+cp /tmp/src/<rel/path> /tmp/orig            # then edit /tmp/src/<rel/path>
+diff -u --label a/<rel/path> --label b/<rel/path> /tmp/orig /tmp/src/<rel/path> > patches/foo.patch
+patch -p1 --dry-run --fuzz=0 < patches/foo.patch   # must report "Hunk #1 succeeded"
+```
+Note the COPY-source path may differ from the `-p1` path (e.g. upstream `backend/trip/...` → image `/app/trip/...`); set the `diff` labels to the *in-image* path.
+
 ### `dbuild build` "succeeded" but the image is broken
 Read the inner build log, not the wrapper exit code. Grep `error:` / `Failed` / `gyp ERR`.
 
