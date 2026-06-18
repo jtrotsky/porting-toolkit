@@ -31,7 +31,9 @@ Get a written **port plan** before touching a Containerfile. Must answer:
 - Build system (pnpm/npm/yarn, vite/esbuild, monorepo workspaces).
 - **Native modules** — the decisive question. List every dep with prebuilt platform binaries (`@libsql/*`, `better-sqlite3`, `sharp`, `@napi-rs/*`, `@img/*`, …). For each: does a FreeBSD prebuilt exist? Does it build from source on FreeBSD? (See cookbook — this is 80% of the work.)
 - Database driver + whether it works on FreeBSD (libsql does NOT).
-- License + the smallest health endpoint for CIT.
+- **Base image shape** — long-running **service** or **one-shot CLI / non-daemon tool**? Service → `ghcr.io/daemonless/base:<tag>` (s6-supervised). CLI/tool → `ghcr.io/daemonless/base-core:<tag>` (minimal, **no** service supervision; lighter, still ships `pkg`). Tells it's a CLI: no listening port, no health endpoint, runs-and-exits, upstream ships a `bin`/command not a server. On a minimal base, add `ca_root_nss` if the build fetches over HTTPS (npm/pip/curl).
+- **Base version = LOWEST supported minor, not the build host's.** FreeBSD ABI compat is backward-only: a 15.0-userland image runs on 15.0 **and** 15.1 kernels, but a 15.1 image is **not** guaranteed on 15.0. So use the rolling `15-pkg` (currently 15.0) for portability; only pin `15.1-pkg` if a 15.1-only feature is required (rare). Containers run on the host kernel, so this is a real runtime gate, not cosmetic.
+- License + CIT: a **service** → smallest health endpoint (`health`/`port` mode); a **CLI** → `shell`-mode CIT running the command (e.g. `<tool> --version`) asserting exit 0 (it won't stay up for an exec-in).
 
 ## Phase 2 — Scaffold
 - `dbuild init` or copy the nearest image. Set `compose.yaml` metadata + `.daemonless/config.yaml` (CIT mode, port, health endpoint).
