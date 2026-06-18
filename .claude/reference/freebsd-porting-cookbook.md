@@ -57,6 +57,15 @@ Also drop any static import of a libsql *task/queue* driver — it eval-loads th
 ### `tsx: not found` / tsx fails under `/bin/sh`
 **Cause:** tsx's bin wrapper is a bash script. **Fix:** `node --import tsx script.ts`.
 
+### `npm install -g` CLI fails as unprivileged user: `ocijail: error executing container command: No such file or directory`
+**Signature:** image runs (no hang), but the entrypoint immediately errors with `No such file or directory`, even though `/usr/local/bin/<tool>` exists. As `--user root` it works fine.
+**Cause:** npm run as root under the base image's restrictive umask installs the global tree **mode 700 / root-only** (`drwx------ /usr/local/lib/node_modules/@scope`). A container running as the unprivileged `bsd` user can't traverse into it to reach the bin — exec returns ENOENT.
+**Fix:** make the global modules world-readable/searchable after install, in a **late** layer so the expensive npm `RUN` stays cache-valid:
+```dockerfile
+RUN chmod -R a+rX /usr/local/lib/node_modules
+```
+**Why:** `a+rX` adds read for all and search/execute on dirs (and already-exec files) only — exactly what an unprivileged `USER` needs to run a root-installed CLI.
+
 ### node-gyp: `cc: not found` / `ar: not found` / missing headers
 **Cause:** the base jail ships no C toolchain and no `/usr/include`.
 **Fix (builder stage only):** `pkg install -y FreeBSD-clang FreeBSD-lld FreeBSD-toolchain FreeBSD-clibs-dev pkgconf python3 gmake`. Better: avoid native compiles (prefer `node:sqlite`, wasm sharp) and drop the toolchain.
@@ -114,6 +123,18 @@ Read the inner build log, not the wrapper exit code. Grep `error:` / `Failed` / 
 
 ### `dbuild generate` rewrote README.md with fork URLs
 Restore `README.md` to upstream before committing — only `Containerfile` + `.j2` + `patches/` belong in the PR.
+
+### Build hangs for 10+ min AFTER the `RUN` finishes — `storage-applyLayer` pegged at 100% CPU
+**Signature:** the last build output is the end of a `RUN` (e.g. `pkg clean` done), then minutes of silence; `ps` shows `storage-applyLayer .../zfs/graph/<hash> (podman)` in **R** state burning CPU, `podman ps` goes sluggish.
+**Cause:** podman's **ZFS storage driver** commits a layer by unpacking it file-by-file into a per-layer ZFS dataset. A `node_modules`-heavy layer (node + npm + a JS app = thousands of tiny files) makes this O(files) commit grind for 10+ min. It's CPU-bound (R), not stuck (D), and not a disk-space issue.
+**Fix:** nothing required — it finishes; just wait. To reduce it: keep the node layer lean, or use the overlay/vfs storage driver for build hosts. Disk: `df`/`zfs list` to rule out a full pool.
+**Why:** ZFS driver = dataset-per-layer; file-count, not byte-count, dominates commit time.
+
+### Two `dbuild build`s (or build + `podman pull`) at once wedge podman
+**Signature:** everything hangs; `podman ps` times out; nothing is downloading (`sockstat` shows no registry connection).
+**Cause:** podman serialises on a single image-store lock. Concurrent build/pull operations queue behind a held lock; a stuck one wedges the lot.
+**Fix:** run builds **one at a time**, and not alongside a `podman-compose pull`. Recovery: stop the extra builds, kill any orphaned `buildah`/stuck `podman images` PIDs; running containers (`conmon`) are unaffected and keep serving.
+**Why:** daemonless podman has no broker arbitrating concurrent store access — the lock is it.
 
 ---
 
