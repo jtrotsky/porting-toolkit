@@ -96,6 +96,26 @@ Cloned/COPY'd source often lands as `root:wheel 700`; the unprivileged runtime u
 
 ## General daemonless / dbuild patterns
 
+### Catalog metadata: set `x-daemonless: class:` — and where the config lives depends on it
+**Cause:** the daemonless catalog/README generator reads metadata from an `x-daemonless:` block, but *where* that block lives and which files an image ships depend on its **class**. dbuild's `VALID_IMAGE_CLASSES` = `service` | `cli` | `base` (default `service`). Easy to forget the field entirely, or to give a run-and-exit CLI a `compose.yaml` it should never have.
+**Fix — pick the class, then follow its layout:**
+- **`service`** (persistent daemon, e.g. papra, sparky, trip): `x-daemonless:` block lives in **`compose.yaml`**; also ship `.daemonless/config.yaml` (`build:` variants + `cit:` screenshot/port/health) and a `.daemonless/baseline-*.png`. Set `class: "service"` explicitly even though it's the default.
+- **`cli`** (run-and-exit tool, e.g. immich-cli): **no `compose.yaml`**. Put everything in `.daemonless/config.yaml`:
+  ```yaml
+  x-daemonless:
+    class: cli
+  build:
+    variants:
+      - tag: latest
+        containerfile: Containerfile
+  cit:
+    mode: command            # runs to completion, asserts exit 0 + output regex
+    expect_output: '\d+\.\d+\.\d+'   # keep generic, don't pin the exact version
+  ```
+- **`base`** (image for `FROM`): no deployment docs.
+**Also:** `category:` must be one of dbuild's `VALID_CATEGORIES` (Base, Databases, Development, Downloaders, Infrastructure, Media Management, Media Servers, Monitoring, Network, Photos & Media, Productivity, Security, Utilities). `"Apps"` is **not** valid and won't slot into the catalog.
+**Why:** the catalog and README layout branch on `class`; a CLI rendered as a service (or vice-versa) generates wrong deployment docs. Schema source of truth: `dbuild/dbuild/config.py` (`Metadata`, `VALID_IMAGE_CLASSES`, `VALID_CATEGORIES`).
+
 ### "Package X not found" generally
 Check the base image's pkg branch first (`quarterly` vs `latest`).
 
@@ -121,8 +141,14 @@ Note the COPY-source path may differ from the `-p1` path (e.g. upstream `backend
 ### `dbuild build` "succeeded" but the image is broken
 Read the inner build log, not the wrapper exit code. Grep `error:` / `Failed` / `gyp ERR`.
 
-### `dbuild generate` rewrote README.md with fork URLs
-Restore `README.md` to upstream before committing — only `Containerfile` + `.j2` + `patches/` belong in the PR.
+### `dbuild generate` rewrote README.md (+ Containerfile) with fork URLs (`ghcr.io/jtrotsky/...`)
+**Cause:** `dbuild` auto-derives the registry org from `git remote get-url origin` (`config.py:_detect_registry`). In a fork, origin is *your* account, so generated docs/image refs point at `ghcr.io/<you>` instead of `ghcr.io/daemonless`.
+**Fix:** force the upstream registry when generating from a fork:
+```sh
+dbuild generate --registry ghcr.io/daemonless      # or: export DBUILD_REGISTRY=ghcr.io/daemonless
+```
+Precedence: `--registry` / `DBUILD_REGISTRY` env → org from `origin` → fallback `ghcr.io/daemonless`.
+Then restore any stray `README.md` to upstream before committing — only `Containerfile` + `.j2` + `patches/` belong in the PR.
 
 ### Build hangs for 10+ min AFTER the `RUN` finishes — `storage-applyLayer` pegged at 100% CPU
 **Signature:** the last build output is the end of a `RUN` (e.g. `pkg clean` done), then minutes of silence; `ps` shows `storage-applyLayer .../zfs/graph/<hash> (podman)` in **R** state burning CPU, `podman ps` goes sluggish.
