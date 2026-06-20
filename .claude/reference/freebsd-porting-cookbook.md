@@ -141,8 +141,8 @@ Note the COPY-source path may differ from the `-p1` path (e.g. upstream `backend
 ### `dbuild build` "succeeded" but the image is broken
 Read the inner build log, not the wrapper exit code. Grep `error:` / `Failed` / `gyp ERR`.
 
-### `dbuild generate` rewrote README.md (+ Containerfile) with fork URLs (`ghcr.io/jtrotsky/...`)
-**Cause:** `dbuild` auto-derives the registry org from `git remote get-url origin` (`config.py:_detect_registry`). In a fork, origin is *your* account, so generated docs/image refs point at `ghcr.io/<you>` instead of `ghcr.io/daemonless`.
+### `dbuild generate` rewrote README.md (+ Containerfile) with the wrong registry org (your fork instead of `ghcr.io/daemonless`)
+**Cause:** `dbuild` auto-derives the registry org from `git remote get-url origin` (`config.py:_detect_registry`). When you run from a fork, origin is your own account, so generated docs/image refs point at your fork's org instead of `ghcr.io/daemonless`.
 **Fix:** force the upstream registry when generating from a fork:
 ```sh
 dbuild generate --registry ghcr.io/daemonless      # or: export DBUILD_REGISTRY=ghcr.io/daemonless
