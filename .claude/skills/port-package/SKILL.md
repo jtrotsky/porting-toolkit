@@ -33,10 +33,10 @@ Get a written **port plan** before touching a Containerfile. Must answer:
 - Database driver + whether it works on FreeBSD (libsql does NOT).
 - **Base image shape** — long-running **service** or **one-shot CLI / non-daemon tool**? Service → `ghcr.io/daemonless/base:<tag>` (s6-supervised). CLI/tool → `ghcr.io/daemonless/base-core:<tag>` (minimal, **no** service supervision; lighter, still ships `pkg`). Tells it's a CLI: no listening port, no health endpoint, runs-and-exits, upstream ships a `bin`/command not a server. On a minimal base, add `ca_root_nss` if the build fetches over HTTPS (npm/pip/curl).
 - **Base version = LOWEST supported minor, not the build host's.** FreeBSD ABI compat is backward-only: a 15.0-userland image runs on 15.0 **and** 15.1 kernels, but a 15.1 image is **not** guaranteed on 15.0. So use the rolling `15-pkg` (currently 15.0) for portability; only pin `15.1-pkg` if a 15.1-only feature is required (rare). Containers run on the host kernel, so this is a real runtime gate, not cosmetic.
-- License + CIT: a **service** → smallest health endpoint (`health`/`port` mode); a **CLI** → `shell`-mode CIT running the command (e.g. `<tool> --version`) asserting exit 0 (it won't stay up for an exec-in).
+- License + CIT: a **service** → smallest health endpoint (`health`/`port` mode); a **CLI** → `command`-mode CIT running the command to completion (e.g. `<tool> --version`) and asserting exit 0 + an `expect_output` regex (a run-and-exit tool has no live process for `shell`/`port`/`health`/`screenshot`).
 
 ## Phase 2 — Scaffold
-- `dbuild init` or copy the nearest image. Set `compose.yaml` metadata + `.daemonless/config.yaml` (CIT mode, port, health endpoint).
+- `dbuild init` or copy the nearest image. Set the **image class** (`x-daemonless: class:` — `service`/`cli`/`base`) explicitly. A **service** ships `compose.yaml` (with the `x-daemonless` block) + `.daemonless/config.yaml` (CIT mode, port, health). A **CLI** ships **no `compose.yaml`** — put `x-daemonless: class: cli` + `build:` + `cit: mode: command` in `.daemonless/config.yaml`. See the cookbook entry "Catalog metadata: set `x-daemonless: class:`".
 - Write `Containerfile.j2`, then `dbuild generate`.
 - **Verify `compose.yaml` metadata:** run `scripts/lint-compose.sh` to cross-check metadata against Containerfile LABELs. Fix mismatches before proceeding.
 - **Pre-build verification:** `pkg rquery` every candidate package name before the first build. A wrong pkg name wastes a ~15-min build cycle.
