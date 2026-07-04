@@ -18,6 +18,17 @@ IMAGE_NAME=$(basename "$(pwd)")
 LOG_FILE="cit-output.log"
 MARKER=".cit-passed"
 
+# dbuild runs podman with privilege escalation when not root (its _priv_prefix);
+# we must match it or `podman ps`/`podman logs` silently see no containers.
+PODMAN="podman"
+if [ "$(id -u)" -ne 0 ]; then
+  if command -v doas >/dev/null 2>&1; then
+    PODMAN="doas podman"
+  elif command -v sudo >/dev/null 2>&1; then
+    PODMAN="sudo podman"
+  fi
+fi
+
 # Clean previous state
 rm -f "$LOG_FILE" "$MARKER"
 
@@ -30,7 +41,7 @@ DBUILD_PID=$!
 # Wait for the CIT container to appear (up to 30s)
 CIT_CONTAINER=""
 for i in $(seq 1 30); do
-  CIT_CONTAINER=$(podman ps --format '{{.Names}}' 2>/dev/null | grep -iE "cit.*${IMAGE_NAME}|${IMAGE_NAME}.*cit" | head -1)
+  CIT_CONTAINER=$($PODMAN ps --format '{{.Names}}' 2>/dev/null | grep -iE "cit.*${IMAGE_NAME}|${IMAGE_NAME}.*cit" | head -1)
   if [ -n "$CIT_CONTAINER" ]; then
     break
   fi
@@ -43,14 +54,14 @@ if [ -n "$CIT_CONTAINER" ]; then
   # Wait for meaningful output (up to 120s)
   DEADLINE=$(($(date +%s) + 120))
   while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-    if podman logs "$CIT_CONTAINER" 2>&1 | grep -qiE "Migrations|Starting|Error|listening|startup complete|ready" 2>/dev/null; then
+    if $PODMAN logs "$CIT_CONTAINER" 2>&1 | grep -qiE "Migrations|Starting|Error|listening|startup complete|ready" 2>/dev/null; then
       break
     fi
     sleep 2
   done
 
   # Capture full logs (filter kevent noise)
-  podman logs "$CIT_CONTAINER" 2>&1 | grep -ivE "kevent\(\)" > "$LOG_FILE" 2>/dev/null || true
+  $PODMAN logs "$CIT_CONTAINER" 2>&1 | grep -ivE "kevent\(\)" > "$LOG_FILE" 2>/dev/null || true
   echo "[cit] Logs written to $LOG_FILE"
 else
   echo "[cit] WARNING: could not find CIT container — logs not captured"

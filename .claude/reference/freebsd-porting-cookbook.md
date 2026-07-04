@@ -167,6 +167,23 @@ Then restore any stray `README.md` to upstream before committing — only `Conta
 **Fix:** run builds **one at a time**, and not alongside a `podman-compose pull`. Recovery: stop the extra builds, kill any orphaned `buildah`/stuck `podman images` PIDs; running containers (`conmon`) are unaffected and keep serving.
 **Why:** daemonless podman has no broker arbitrating concurrent store access — the lock is it.
 
+### `dbuild build` dies with exit 137; the log just stops mid-build (often inside `npm ci`)
+**Signature:** the Bash tool returns "Exit code 137" with no build error above it; the tee'd log ends mid-step; the session may end right there.
+**Cause:** the agent harness's Bash tool SIGKILLs foreground commands at its max timeout (~10 min). A cold FreeBSD image build (pkg install + npm ci + compile + ZFS layer commits) routinely takes longer. Nothing is wrong with the build — the harness killed it. (2026-07-04: this ended a whole port session mid-`npm ci`, before `WIP.md` could be written.)
+**Fix:** run `dbuild build >build.log 2>&1` with the Bash tool's `run_in_background: true`, then grep `build.log` after it completes. Never foreground a build.
+**Why:** the timeout is a harness ceiling, not a build failure; backgrounded commands aren't subject to it.
+
+### CIT wastes 120s: `No ready signal after 120s (continuing anyway)`
+**Signature:** CIT passes, but only after a full 120-second stall before the port/health probes.
+**Cause:** dbuild's health-mode CIT greps container logs for default ready patterns (`Warmup complete|services.d.*done|Application started|Startup complete|listening on|is ready`). If the app's startup line matches none of them (e.g. IPP logs `Server started on port 3000`), dbuild burns the whole `wait` window before probing.
+**Fix:** tell dbuild the app's real startup line in `.daemonless/config.yaml`:
+```yaml
+cit:
+  ready: "Server started on port"   # the literal line the app logs when up
+```
+(or have the s6 `run` script echo a line containing `listening on`).
+**Why:** the ready gate is log-regex-based; an unmatched pattern silently degrades to a fixed sleep on every test run.
+
 ---
 
 ## Go (stub — fill in as you port)

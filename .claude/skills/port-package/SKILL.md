@@ -18,6 +18,8 @@ You are porting an upstream app to a FreeBSD `daemonless` container image built 
 4. **`dbuild test` truncates logs on failure** — use `scripts/cit-with-logs.sh` for full log capture, or see `.claude/reference/cit-and-logs.md` for manual capture.
 5. **Pin the upstream release tag.** Never build `main`.
 6. **Branch off `upstream/main`** for the PR so the diff is just your files (no fork-URL/sbom noise). If `dbuild generate` rewrote `README.md` with fork URLs, restore it before committing.
+7. **Always run `dbuild build` in the background — never foreground.** A cold build (pkg install + npm ci + compile + ZFS layer commits) routinely outlives the Bash tool's max timeout, which SIGKILLs the command (exit 137) and ends your session mid-build — no error to read, no chance to write `WIP.md`. Run `dbuild build >build.log 2>&1` with `run_in_background: true`; you are re-invoked when it exits, then grep `build.log` per rule 2. `dbuild test` finishes in minutes and is fine in the foreground.
+8. **The image name comes from the directory name** (`dbuild` has no config override). Work in a directory named exactly like the target image (`immich-public-proxy`, not `ipp-daemonless`), or every generated artifact — README, registry refs, built image tag — carries the wrong name.
 
 ## Execution discipline (binding — follow mechanically)
 These rules exist so the port succeeds on procedure, not cleverness. Do not
@@ -66,7 +68,7 @@ Get a written **port plan** before touching a Containerfile. Must answer:
 - **Pre-build verification:** `pkg rquery` every candidate package name before the first build. A wrong pkg name wastes a ~15-min build cycle.
 
 ## Phase 3 — Build loop
-`dbuild generate → dbuild build → on failure: read the real error → look up its class in the cookbook → apply the documented fix → repeat.`
+`dbuild generate → dbuild build (backgrounded, per operating rule 7) → on failure: read the real error → look up its class in the cookbook → apply the documented fix → repeat.`
 If one error resists 2 attempts, hand it to the `freebsd-port-solver` subagent.
 
 ## Phase 4 — Runtime test (CIT) + log capture
