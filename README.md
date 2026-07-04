@@ -2,6 +2,8 @@
 
 Shared Claude Code configuration for porting upstream apps to FreeBSD daemonless OCI images.
 
+**Testing the toolkit itself:** see [TESTING.md](TESTING.md) — the weak-model test protocol (can Sonnet complete a port on these docs alone?).
+
 ## What's in here
 
 | Path | Purpose |

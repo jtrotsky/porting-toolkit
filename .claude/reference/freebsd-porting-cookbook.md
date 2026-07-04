@@ -2,6 +2,11 @@
 
 Error-signature-keyed fixes for porting apps to FreeBSD daemonless images. **Look here BEFORE guessing. Append a new entry every time you solve something new** — that's what makes the Nth port fast. Each entry: *signature → root cause → fix → why*.
 
+**How to look up:** grep this file for the most distinctive literal line of your
+error first (`grep -n -F "..."`), then by keyword (`sqlite`, `sharp`, `gyp`,
+`Temporal`, `hang`), then skim the section for your runtime. Apply matches
+verbatim — these fixes are build-verified; your variation of them is not.
+
 ---
 
 ## Node / JavaScript

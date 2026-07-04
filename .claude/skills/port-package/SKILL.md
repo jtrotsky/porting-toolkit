@@ -19,6 +19,30 @@ You are porting an upstream app to a FreeBSD `daemonless` container image built 
 5. **Pin the upstream release tag.** Never build `main`.
 6. **Branch off `upstream/main`** for the PR so the diff is just your files (no fork-URL/sbom noise). If `dbuild generate` rewrote `README.md` with fork URLs, restore it before committing.
 
+## Execution discipline (binding — follow mechanically)
+These rules exist so the port succeeds on procedure, not cleverness. Do not
+deviate from them even when you believe you see a shortcut.
+- **On ANY build or runtime error, your FIRST action is** (before hypothesising):
+  `grep -n -F "<the most distinctive line of the error>" .claude/reference/freebsd-porting-cookbook.md`
+  — then broaden to a keyword if no hit. A cookbook hit = apply that fix verbatim.
+- **One change per build cycle.** Never batch two fixes into one build — when it
+  passes you won't know which worked; when it fails you won't know which broke it.
+- **No invented fixes.** If the cookbook has no entry and your first attempt at a
+  fix fails, do not keep improvising: hand the error to the `freebsd-port-solver`
+  subagent. If that also fails, write `WIP.md` and stop. An unfinished port with a
+  clean WIP.md is a success state; a repo full of speculative hacks is not.
+- **Never guess names or versions.** Package names: `pkg rquery '%v' <name>`
+  first, every time. Upstream versions: read the releases page, never memory.
+- **Verify each phase's exit gate before moving on** (generate ran clean; lint
+  passed; the build log greps clean; CIT actually PASSED — not "should pass").
+- **Log as you go:** append every error + what fixed it to `PROCESS-LOG.md` at the
+  moment it happens, not retrospectively. New non-cookbook fixes also get a
+  cookbook entry (signature → cause → fix → why) immediately.
+- **If `PORT-BRIEF.md` exists at the repo root, it is the completed Phase 1 port
+  plan** — authored with stronger research context than you have. Trust its facts
+  (deps, runtime, traps), re-verify only the pinned tag is still the latest
+  release, skip the research subagent, and go straight to Phase 2.
+
 ## Phase 0 — Intake
 - Check for `WIP.md` — resume from there if it exists.
 - Identify the upstream repo, app name, and target category/port.

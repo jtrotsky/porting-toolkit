@@ -41,10 +41,13 @@ if [ "$REFRESH" = true ] && [ -d .claude ]; then
   fi
 fi
 
-# Core .claude/ directories — always overwrite from toolkit
+# Core .claude/ directories — always overwrite from toolkit.
+# NOTE the /. on the source: "copy contents" portably. A bare trailing slash
+# only means contents under BSD cp; GNU cp (Linux/Linuxulator) nests a subdir
+# instead, which silently dropped every hook on non-BSD installs (2026-07-04).
 for dir in agents hooks reference skills; do
   mkdir -p ".claude/$dir"
-  cp -R "$TOOLKIT_DIR/.claude/$dir/" ".claude/$dir/"
+  cp -R "$TOOLKIT_DIR/.claude/$dir/." ".claude/$dir/"
   echo "[toolkit] Installed .claude/$dir/"
 done
 
