@@ -39,23 +39,51 @@ only symptom was an ignorable chmod warning. Lesson: verify the rails installed
    cd <image-repo> && claude --model sonnet
    > /port-package <upstream-url>
    ```
-3. **`PROCESS-LOG.md` is the measuring instrument.** Afterwards, a strong-model
-   session grades the run: every hesitation, wrong turn, invented fix, ignored
-   rule, or rescue is a DOC GAP, not a model failure. Patch the docs from that
-   evidence. Test → rewrite, never rewrite → hope.
+3. **`JOURNAL.log` is the measuring instrument; `PROCESS-LOG.md` is the
+   narrative.** The journal hook records every command automatically, so the
+   instrument no longer depends on the discipline of the model being measured
+   (run 1 wrote zero PROCESS-LOG entries in 121 turns). Afterwards, a
+   strong-model session grades the run — journal + transcript + PROCESS-LOG:
+   every hesitation, wrong turn, invented fix, ignored rule, or rescue is a
+   DOC GAP, not a model failure. Patch the docs from that evidence.
+   Test → rewrite, never rewrite → hope.
 4. Outcomes: PASS (PR open, CIT green, no rescue) · PASS-WITH-GAPS (done, but
    the log shows doc friction — patch docs) · CLEAN FAIL (WIP.md written per
    the rules — patch docs, rerun) · DIRTY FAIL (flailed, broke discipline —
-   the discipline section itself needs strengthening).
+   the discipline section itself needs strengthening) · HARNESS FAIL (killed
+   by the harness — tool-timeout SIGKILL, crash — before discipline could
+   apply; fix the trap in TOOLING, not prose, and rerun).
 
 ## Test ladder
 
 | Rung | Port | Why | Status |
 |---|---|---|---|
-| 1 | `immich-public-proxy` (staged in `~/workspace/ipp-daemonless`) | Pure-JS, zero native modules, no DB — isolates *process* from *gnarl*. Brief pins v3.0.1. | STAGED |
-| 2 | something with one native module (sharp- or sqlite-class) | Tests cookbook lookup under real pressure | — |
-| 3 | a Python/FastAPI app | Tests the second runtime section cold | — |
+| 1 | `immich-public-proxy` | Pure-JS, zero native modules, no DB — isolates *process* from *gnarl*. Brief pins v3.0.1. | RUN 1: HARNESS FAIL (see log); port finished by a strong model. **Cold re-run pending** to validate the patches. |
+| 2 | `ffmpeg` (staged in `~/workspace/ffmpeg`) | CLI class + pkg-based port — tests the `cli` layout (no compose.yaml, command-mode CIT) and the brief's don't-copy discipline (twin has an invalid category label). First run on the post-run-1 rails. | STAGED 2026-07-04 |
+| 3 | something with one native module (sharp- or sqlite-class) | Tests cookbook lookup under real pressure | — |
+| 4 | a Python/FastAPI app | Tests the second runtime section cold | — |
 
 ## Log of runs
 
 *(append per run: date, model, port, outcome, gaps found → doc patches made)*
+
+### Run 1 — 2026-07-04 · Sonnet · immich-public-proxy (rung 1) · HARNESS FAIL
+- **Good (procedure held):** cookbook read first; trusted the brief and skipped
+  research per the rules; re-verified only the pinned tag; `pkg rquery`'d every
+  package name; `.j2`-only edits; generate → lint gates in order; correct
+  `/`-vs-`/healthcheck` CIT call. The scaffold it wrote later built and passed
+  CIT unchanged.
+- **Killed:** foreground `dbuild build` SIGKILLed at the Bash tool's 600s
+  ceiling (turn 121, mid-`npm ci`); session died; no WIP.md possible.
+- **Model-attributable gaps → patches made:** zero PROCESS-LOG writes in 121
+  turns (→ `journal.sh` auto-journal hook); spawned 7 harness tasks it never
+  used (→ operating rule 9 forbids); ~40 turns touring 4 sibling repos because
+  the brief said "check the registry" (→ mandatory **Crib** section in
+  `templates/PORT-BRIEF.md`); "one change per build cycle" ambiguous for the
+  initial scaffold (→ scoped to build 2+).
+- **Tooling patches:** foreground builds now hook-blocked +
+  `scripts/build.sh` wrapper; `cit-with-logs.sh` doas fix; `cit.ready` entry;
+  git pre-push rail; smoke-test gate; `port-auditor` PR gate.
+- **Caveat:** all patches since the kill are strong-model-authored and
+  weak-model-UNVALIDATED. Rung 1 must be re-run cold (fresh easy port, or this
+  one from scratch in a throwaway dir) before the toolkit's claim is credible.

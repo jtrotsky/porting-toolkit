@@ -61,9 +61,9 @@ if [ -f /tmp/settings.local.json.bak ]; then
   echo "[toolkit] Restored .claude/settings.local.json"
 fi
 
-# Templates
+# Templates (.md + .sh — smoke-test.sh lives here)
 mkdir -p templates
-cp "$TOOLKIT_DIR/templates/"*.md templates/
+cp "$TOOLKIT_DIR/templates/"*.md "$TOOLKIT_DIR/templates/"*.sh templates/
 echo "[toolkit] Installed templates/"
 
 # Scripts
@@ -74,6 +74,27 @@ echo "[toolkit] Installed scripts/"
 
 # Make hooks executable
 chmod +x .claude/hooks/*.sh
+
+# Git rails (agent-agnostic — they hold no matter what drives the repo)
+if [ -d .git ]; then
+  if ! git rev-parse HEAD >/dev/null 2>&1; then
+    echo "WARNING: repo has no commits yet — make an initial commit before starting a port" >&2
+    echo "         (branch-off-upstream rules and the pre-push rail assume one)" >&2
+  fi
+  if [ -f .git/hooks/pre-push ] && ! grep -q 'cit-passed' .git/hooks/pre-push 2>/dev/null; then
+    echo "WARNING: existing .git/hooks/pre-push left untouched — add the .cit-passed check to it manually" >&2
+  else
+    cp "$TOOLKIT_DIR/scripts/pre-push.git-hook" .git/hooks/pre-push
+    chmod +x .git/hooks/pre-push
+    echo "[toolkit] Installed git pre-push rail (blocks push without a CIT pass)"
+  fi
+fi
+
+# Ignore generated/per-session artifacts in the image repo
+for entry in JOURNAL.log build.log cit-output.log .cit-passed; do
+  grep -qxF "$entry" .gitignore 2>/dev/null || echo "$entry" >> .gitignore
+done
+echo "[toolkit] Ensured .gitignore covers JOURNAL.log/build.log/cit-output.log/.cit-passed"
 
 # CLAUDE.md — only on first install, don't overwrite a filled-in one
 if [ ! -f CLAUDE.md ]; then

@@ -84,6 +84,33 @@ if [ -n "$compose_upstream" ]; then
   fi
 fi
 
+# ---- Quality floors (mechanical standards — model-independent) ----
+J2="${3:-Containerfile.j2}"
+if [ -f "$J2" ]; then
+  # Floor 1: upstream must be pinned to a release tag, never a moving ref
+  if grep -qE 'ARG +[A-Za-z_]*VERSION *= *"?(main|master|latest|HEAD)"?[[:space:]]*$' "$J2" \
+     || grep -qE '(--branch|-b) +(main|master)([[:space:]]|"|$)' "$J2"; then
+    warn "version pin: $J2 builds a moving ref (main/master/latest) — pin a release tag"
+  fi
+
+  # Floor 2: patches must apply strictly and be guarded against upstream drift
+  if [ -d patches ] && [ -n "$(ls patches/ 2>/dev/null)" ]; then
+    if grep -q 'patch ' "$J2" && ! grep -q 'fuzz=0' "$J2"; then
+      warn "patches: applied without --fuzz=0 — context drift will apply silently wrong"
+    fi
+    if grep -qE 'COPY +patches/' "$J2" && ! grep -q 'test -f' "$J2"; then
+      warn "patches: COPY without a 'test -f' patch-rot guard — a moved upstream file ships unpatched"
+    fi
+  fi
+fi
+
+# Floor 3: no compiler/toolchain in the RUNTIME stage (builder stage is fine)
+runtime_stage=$(awk '/^FROM /{buf=""} {buf=buf $0 "\n"} END{printf "%s", buf}' "$CONTAINERFILE")
+toolchain_hits=$(printf '%s' "$runtime_stage" | grep -nE 'FreeBSD-(clang|lld|toolchain|clibs-dev)|node-gyp' || true)
+if [ -n "$toolchain_hits" ]; then
+  warn "runtime stage installs build toolchain (keep it builder-only): $(printf '%s' "$toolchain_hits" | head -3 | tr '\n' ' ')"
+fi
+
 # Summary
 if [ "$ERRORS" -eq 0 ]; then
   echo "lint-compose: all checks passed"

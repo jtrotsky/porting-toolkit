@@ -78,6 +78,20 @@ rm -f "${LOG_FILE}.dbuild"
 if [ "$RESULT" -eq 0 ]; then
   echo ""
   echo "[cit] CIT PASSED"
+  # Functional probe: CIT proves the app boots; the smoke test proves it works.
+  # .cit-passed (which gates git push / PR) is only written once BOTH are green.
+  if [ -x scripts/smoke-test.sh ]; then
+    echo "[cit] Running functional probe (scripts/smoke-test.sh)..."
+    if scripts/smoke-test.sh; then
+      echo "[cit] SMOKE PASSED"
+    else
+      echo "[cit] SMOKE FAILED — the image boots but does not do its job. No marker written." >&2
+      exit 1
+    fi
+  else
+    echo "[cit] NOTE: no scripts/smoke-test.sh — only boot is proven, not function." >&2
+    echo "[cit] Create one from templates/smoke-test.sh (see PORT-BRIEF 'Functional probe')." >&2
+  fi
   date -u '+%Y-%m-%dT%H:%M:%SZ' > "$MARKER"
   exit 0
 else

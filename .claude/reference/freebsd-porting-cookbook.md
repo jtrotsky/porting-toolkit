@@ -184,6 +184,12 @@ cit:
 (or have the s6 `run` script echo a line containing `listening on`).
 **Why:** the ready gate is log-regex-based; an unmatched pattern silently degrades to a fixed sleep on every test run.
 
+### Container gets `UND_ERR_CONNECT_TIMEOUT` reaching the host or a sibling container
+**Signature:** app logs `TypeError: fetch failed … ConnectTimeoutError (attempted address: 10.88.0.1:<port>)` (or a sibling container's `10.88.0.x`), while host→container curl works fine.
+**Cause:** pf on the FreeBSD host filters podman-bridge traffic — bridge→host and container→container connections can be blocked. Only host→container is guaranteed.
+**Fix:** when a test needs a reachable helper (e.g. a smoke test's dummy upstream), share ONE network namespace: `podman run --network container:<main> -e <PORT_VAR>=19998 <image>` and point the main app at `http://127.0.0.1:19998`.
+**Why:** loopback inside a single netns never crosses the bridge, so no firewall policy applies. (Found 2026-07-04 building the immich-public-proxy smoke test.)
+
 ---
 
 ## Go (stub — fill in as you port)

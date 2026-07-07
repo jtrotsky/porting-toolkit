@@ -8,14 +8,14 @@ Shared Claude Code configuration for porting upstream apps to FreeBSD daemonless
 
 | Path | Purpose |
 |---|---|
-| `.claude/skills/port-package/` | Full porting workflow: research, scaffold, build, CIT, harden, PR |
+| `.claude/skills/port-package/` | Full porting workflow: research, scaffold, build, CIT + smoke, harden, audit, PR |
 | `.claude/skills/bump-upstream/` | Bump a pinned upstream version and re-validate |
-| `.claude/agents/` | Subagents for upstream research and stubborn-error deep-dives |
-| `.claude/hooks/` | Guardrails: block Containerfile edits, warn on README rewrites, enforce CIT before PR |
+| `.claude/agents/` | Subagents: upstream research, stubborn-error deep-dives, pre-PR port audit (provenance gate) |
+| `.claude/hooks/` | Guardrails: block Containerfile edits, block foreground builds, auto-journal every command, warn on README rewrites, enforce CIT before PR |
 | `.claude/reference/` | Cookbook (error-signature-keyed fixes) and CIT log capture guide |
-| `templates/` | BUILD-NOTES, PR body, PROCESS-LOG, and per-image CLAUDE.md templates |
-| `scripts/` | `cit-with-logs.sh` (automated log capture), `lint-compose.sh` (metadata cross-check) |
-| `install.sh` | Copy toolkit files into an image repo |
+| `templates/` | BUILD-NOTES, PR body (provenance + viva), PROCESS-LOG, PORT-BRIEF, smoke-test, and per-image CLAUDE.md templates |
+| `scripts/` | `build.sh` (the only sanctioned build entry), `cit-with-logs.sh` (CIT + smoke + log capture), `lint-compose.sh` (metadata + quality floors), `pre-push.git-hook` (agent-agnostic CIT rail) |
+| `install.sh` | Copy toolkit files into an image repo (also installs the git pre-push rail) |
 
 ## Usage
 

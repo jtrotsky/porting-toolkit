@@ -18,8 +18,9 @@ You are porting an upstream app to a FreeBSD `daemonless` container image built 
 4. **`dbuild test` truncates logs on failure** — use `scripts/cit-with-logs.sh` for full log capture, or see `.claude/reference/cit-and-logs.md` for manual capture.
 5. **Pin the upstream release tag.** Never build `main`.
 6. **Branch off `upstream/main`** for the PR so the diff is just your files (no fork-URL/sbom noise). If `dbuild generate` rewrote `README.md` with fork URLs, restore it before committing.
-7. **Always run `dbuild build` in the background — never foreground.** A cold build (pkg install + npm ci + compile + ZFS layer commits) routinely outlives the Bash tool's max timeout, which SIGKILLs the command (exit 137) and ends your session mid-build — no error to read, no chance to write `WIP.md`. Run `dbuild build >build.log 2>&1` with `run_in_background: true`; you are re-invoked when it exits, then grep `build.log` per rule 2. `dbuild test` finishes in minutes and is fine in the foreground.
+7. **Build only via `scripts/build.sh`, always backgrounded** (`run_in_background: true` — a hook blocks foreground builds). A cold build routinely outlives the Bash tool's max timeout, which SIGKILLs the command (exit 137) and ends your session mid-build — no error to read, no chance to write `WIP.md`. The script also refuses a stale `Containerfile` (`.j2` newer → run `dbuild generate`) and greps `build.log` for the rule-2 failure signatures for you; read its PASS/FAIL verdict when you're re-invoked. `dbuild test` finishes in minutes and is fine in the foreground.
 8. **The image name comes from the directory name** (`dbuild` has no config override). Work in a directory named exactly like the target image (`immich-public-proxy`, not `ipp-daemonless`), or every generated artifact — README, registry refs, built image tag — carries the wrong name.
+9. **Do not create harness tasks or to-do plans (TaskCreate etc.) — the phases below ARE the plan.** The only subagents you spawn are `upstream-researcher` (Phase 1, skipped when a brief exists), `freebsd-port-solver` (stubborn errors), and `port-auditor` (Phase 6 gate). Anything else is coordination overhead that produces nothing.
 
 ## Execution discipline (binding — follow mechanically)
 These rules exist so the port succeeds on procedure, not cleverness. Do not
@@ -27,8 +28,10 @@ deviate from them even when you believe you see a shortcut.
 - **On ANY build or runtime error, your FIRST action is** (before hypothesising):
   `grep -n -F "<the most distinctive line of the error>" .claude/reference/freebsd-porting-cookbook.md`
   — then broaden to a keyword if no hit. A cookbook hit = apply that fix verbatim.
-- **One change per build cycle.** Never batch two fixes into one build — when it
-  passes you won't know which worked; when it fails you won't know which broke it.
+- **One change per build cycle — from build 2 onwards.** The initial scaffold
+  necessarily lands several files before the first build; the rule binds in the
+  debug loop. Never batch two FIXES into one rebuild — when it passes you won't
+  know which worked; when it fails you won't know which broke it.
 - **No invented fixes.** If the cookbook has no entry and your first attempt at a
   fix fails, do not keep improvising: hand the error to the `freebsd-port-solver`
   subagent. If that also fails, write `WIP.md` and stop. An unfinished port with a
@@ -39,7 +42,13 @@ deviate from them even when you believe you see a shortcut.
   passed; the build log greps clean; CIT actually PASSED — not "should pass").
 - **Log as you go:** append every error + what fixed it to `PROCESS-LOG.md` at the
   moment it happens, not retrospectively. New non-cookbook fixes also get a
-  cookbook entry (signature → cause → fix → why) immediately.
+  cookbook entry (signature → cause → fix → why) immediately. (A hook auto-appends
+  every command you run to `JOURNAL.log` — that's the raw recovery record if a
+  session dies; `PROCESS-LOG.md` is the curated narrative you still owe on top.)
+- **Provenance:** every non-boilerplate line you put in `Containerfile.j2`, the
+  run scripts, or a patch must trace to the PORT-BRIEF, a cookbook entry, or an
+  error you logged. If you can't say which, the line doesn't go in. The
+  `port-auditor` walks this before the PR.
 - **If `PORT-BRIEF.md` exists at the repo root, it is the completed Phase 1 port
   plan** — authored with stronger research context than you have. Trust its facts
   (deps, runtime, traps), re-verify only the pinned tag is still the latest
@@ -68,11 +77,17 @@ Get a written **port plan** before touching a Containerfile. Must answer:
 - **Pre-build verification:** `pkg rquery` every candidate package name before the first build. A wrong pkg name wastes a ~15-min build cycle.
 
 ## Phase 3 — Build loop
-`dbuild generate → dbuild build (backgrounded, per operating rule 7) → on failure: read the real error → look up its class in the cookbook → apply the documented fix → repeat.`
+`dbuild generate → scripts/build.sh (backgrounded, per operating rule 7) → on FAIL/SUSPECT: read the real error from build.log → look up its class in the cookbook → apply the documented fix → repeat.`
 If one error resists 2 attempts, hand it to the `freebsd-port-solver` subagent.
 
-## Phase 4 — Runtime test (CIT) + log capture
-Run `scripts/cit-with-logs.sh` (or `dbuild test` with manual log capture per `.claude/reference/cit-and-logs.md`). Diagnose runtime failures (missing Temporal global, native-module load, DB driver shape) against the cookbook. Iterate.
+## Phase 4 — Runtime test (CIT) + functional probe
+- Write `scripts/smoke-test.sh` from `templates/smoke-test.sh`, implementing the
+  PORT-BRIEF's **Functional probe** (one request that exercises the app's actual
+  purpose — CIT's health check only proves a process listens).
+- Run `scripts/cit-with-logs.sh` — it runs CIT, captures full container logs, runs
+  the smoke test, and writes `.cit-passed` (which unlocks push/PR) only when BOTH
+  pass. Diagnose runtime failures (missing Temporal global, native-module load,
+  DB driver shape) against the cookbook. Iterate.
 
 ## Phase 5 — Harden + complete the catalog
 - **Patch-rot guard:** before every `COPY patches/x dest/x`, assert `test -f dest/x` (a COPY silently CREATES the file if upstream moved it → ships unpatched code).
@@ -82,11 +97,21 @@ Run `scripts/cit-with-logs.sh` (or `dbuild test` with manual log capture per `.c
 - **Use standard patches where possible:** prefer `.patch` files with `patch -p1 --fuzz=0` over custom scripts. Reserve scripts for programmatic transformations. `--fuzz=0` is the drift guard (fails on context mismatch).
 - **Catalog screenshots (easy to forget — do it every image):** `dbuild screenshot <upstream image URL>...` downloads the app's screenshots from its README/repo into `.daemonless/screenshots/` for the daemonless catalog. Find them in the upstream README (often a `.github/`, `assets/`, or `docs/` path). (Distinct from `dbuild baseline`, which captures the CIT *comparison* shot for screenshot-mode tests.)
 
-## Phase 6 — PR (then STOP)
+## Phase 6 — Audit gate, then PR (then STOP)
 - `dbuild generate`; restore `README.md` if needed.
 - Write `BUILD-NOTES.md` from `templates/BUILD-NOTES.md` — accurate, scannable.
 - Fill in `PROCESS-LOG.md` from `templates/PROCESS-LOG.md` — record what happened at each phase.
-- Branch off `upstream/main`, push to fork, open PR against `daemonless/<image>` using `templates/PR-BODY.md`.
+- **Spawn the `port-auditor` subagent and address its findings.** It walks every
+  line for provenance (brief / cookbook / logged error), checks BUILD-NOTES
+  honesty and the quality floors, and answers bump-survival. Fix or document
+  each finding (re-running build/CIT if files changed); do not open the PR
+  until it returns CLEAN.
+- **Run the bundled `/code-review` skill on the branch diff before pushing.** It ships
+  with Claude Code itself — it is NOT in this toolkit; do not search for it, install
+  anything, or write a substitute. It is a fresh-context correctness review — a
+  different gate from `port-auditor`, which checks provenance, not bugs. Fix each finding (re-running build/CIT if files changed) or
+  record why it is dismissed in `PROCESS-LOG.md`.
+- Branch off `upstream/main`, push to fork, open PR against `daemonless/<image>` using `templates/PR-BODY.md` — **including its Provenance and Viva sections, answered honestly in your own words** (templated non-answers are an audit failure).
 - Record the verified result (build, CIT: migrations / health 200 / screenshot). **Stop for human review.**
 - **Delete `WIP.md`** if one exists (the port is done).
 
@@ -99,4 +124,4 @@ If you hit a blocker you can't resolve, or the session is ending before the port
 The next session's Phase 0 will pick up from `WIP.md`.
 
 ## Definition of done
-`dbuild build` + `dbuild test` (real CIT pass, not just a tagged image) AND patch-rot + drift guards in place AND `dbuild screenshot` run (catalog screenshots in `.daemonless/screenshots/`) AND `BUILD-NOTES.md` written AND `PROCESS-LOG.md` filled in AND `scripts/lint-compose.sh` passes AND a PR open for review. Append any new gotcha to the cookbook.
+`scripts/build.sh` PASSED + `scripts/cit-with-logs.sh` PASSED (real CIT **and** smoke test — boot alone is not function) AND patch-rot + drift guards in place AND `dbuild screenshot` run (catalog screenshots in `.daemonless/screenshots/`) AND `BUILD-NOTES.md` written AND `PROCESS-LOG.md` filled in AND `scripts/lint-compose.sh` passes AND `port-auditor` returned CLEAN AND `/code-review` findings fixed or dismissed-with-reason AND a PR open for review with the Provenance + Viva sections answered. Append any new gotcha to the cookbook.
