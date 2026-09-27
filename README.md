@@ -1,6 +1,6 @@
 # daemonless porting toolkit
 
-Shared Claude Code configuration for porting upstream apps to FreeBSD daemonless OCI images.
+Shared AGENTS configuration for porting upstream apps to FreeBSD daemonless OCI images. Start by reading the [daemonless AI policy](https://github.com/podman-container-tools/community/blob/main/LLM_POLICY.md) and jump in the Discord if you have any questions. 
 
 **Testing the toolkit itself:** see [TESTING.md](TESTING.md) — the weak-model test protocol (can Sonnet complete a port on these docs alone?).
 
